@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("KlseBacktester.Data")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b188da31361f446834ae3bcbfa4e7ad20710edd")]
 [assembly: System.Reflection.AssemblyProductAttribute("KlseBacktester.Data")]
 [assembly: System.Reflection.AssemblyTitleAttribute("KlseBacktester.Data")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

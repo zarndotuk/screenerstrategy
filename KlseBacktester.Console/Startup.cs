@@ -12,6 +12,7 @@ public static class Startup
     public static void ConfigureServices(IServiceCollection services)
     {
         var settings = LoadSettings();
+        WarmupCalculator.Configure(settings.WarmupBars);
 
         services.AddSingleton(settings);
         services.AddSingleton<IReadOnlyList<(string Ticker, string Name, string Sector)>>(
@@ -28,17 +29,21 @@ public static class Startup
 
         services.AddSingleton<YahooDataFetcher>();
         services.AddSingleton<SignalRepository>();
+        var strategy = settings.Strategy;
         services.AddSingleton(_ => new ScoreEngine
         {
-            EntryMinScore = 7,
-            ExitMinScore = 7,
-            CooldownBars = 5,
-            RequiredBreakoutConfirmations = 1,
-            RequireTrendQualityForEntry = true,
-            LongTrendSlopeLookback = 20,
-            RequiredClosesAboveEma200 = 5,
-            AllowSameBarBreakoutEntry = true,
-            SameBarBreakoutMinScore = 9,
+            EntryMinScore = strategy.EntryMinScore,
+            ExitMinScore = strategy.ExitMinScore,
+            CooldownBars = strategy.CooldownBars,
+            RequiredBreakoutConfirmations = strategy.RequiredBreakoutConfirmations,
+            RequireTrendQualityForEntry = strategy.RequireTrendQualityForEntry,
+            TrendSlopeLookback = strategy.TrendSlopeLookback,
+            LongTrendSlopeLookback = strategy.LongTrendSlopeLookback,
+            RequiredClosesAboveEma200 = strategy.RequiredClosesAboveEma200,
+            AllowSameBarBreakoutEntry = strategy.AllowSameBarBreakoutEntry,
+            SameBarBreakoutMinScore = strategy.SameBarBreakoutMinScore,
+            AllowSetupBarBreakout = strategy.AllowSetupBarBreakout,
+            BreakoutCloseNearHighPercent = strategy.BreakoutCloseNearHighPercent,
         });
         services.AddSingleton<BacktestRunner>();
         services.AddSingleton<BacktesterConsoleApp>();
@@ -68,12 +73,25 @@ public static class Startup
 
     private static List<(string Ticker, string Name, string Sector)> ResolveKlseStocks(AppSettings settings)
     {
-        var curatedStocks = KlseTickers.All
+        var configured = NormalizeStocks(settings.KlseStocks);
+        if (configured.Count > 0)
+            return configured;
+
+        var universe = NormalizeStocks(settings.KlseStockUniverse);
+        return universe.Count > 0 ? universe : CuratedStocks().Values.ToList();
+    }
+
+    private static Dictionary<string, (string Ticker, string Name, string Sector)> CuratedStocks() =>
+        KlseTickers.All
             .GroupBy(s => s.Ticker, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToDictionary(s => s.Ticker, StringComparer.OrdinalIgnoreCase);
 
-        var configured = settings.KlseStocks
+    public static List<(string Ticker, string Name, string Sector)> NormalizeStocks(IEnumerable<StockDefinition> stocks)
+    {
+        var curatedStocks = CuratedStocks();
+
+        return stocks
             .Where(s => !string.IsNullOrWhiteSpace(s.Ticker))
             .Select(s =>
             {
@@ -97,7 +115,5 @@ public static class Startup
             .GroupBy(s => s.Ticker, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
-
-        return configured.Count > 0 ? configured : curatedStocks.Values.ToList();
     }
 }

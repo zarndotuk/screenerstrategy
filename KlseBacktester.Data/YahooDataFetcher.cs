@@ -16,8 +16,10 @@ public class YahooDataFetcher
     private const int MaxFetchAttempts = 5;
     private const int InitialBootstrapDays = 30;
     private const int HistoricalBackfillChunkDays = 90;
+    private const int MaxDirectFetchDays = 186;
     private const int MinimumBootstrapRows = 5;
     private const int RecentDataFreshnessDays = 7;
+    private const int StartGapToleranceDays = 5;
     private static readonly TimeSpan InitialRateLimitBackoff = TimeSpan.FromSeconds(30);
 
     public YahooDataFetcher(MongoContext mongo, ILogger<YahooDataFetcher> logger)
@@ -55,9 +57,10 @@ public class YahooDataFetcher
             var (symbol, name, sector) = tickers[i];
             onProgress?.Invoke(symbol, i + 1, total);
 
+            var calledYahoo = true;
             try
             {
-                await FetchAndStoreTicker(
+                calledYahoo = await FetchAndStoreTicker(
                     symbol,
                     name,
                     sector,
@@ -71,12 +74,17 @@ public class YahooDataFetcher
                 Console.WriteLine($"  [WARN] {symbol} skipped: {ex.Message}");
             }
 
-            await Task.Delay(DelayBetweenTickersMs);
+            // Throttle only when Yahoo was actually hit; cached tickers need no delay.
+            if (calledYahoo && i < total - 1)
+                await Task.Delay(DelayBetweenTickersMs);
         }
     }
 
-    /// <summary>Fetch and store a single ticker. Upserts into MongoDB.</summary>
-    public async Task FetchAndStoreTicker(
+    /// <summary>
+    /// Fetch and store a single ticker. Upserts into MongoDB.
+    /// Returns true if Yahoo was called (false when everything was already cached).
+    /// </summary>
+    public async Task<bool> FetchAndStoreTicker(
         string ticker, string name, string sector,
         DateTime from, DateTime to,
         bool backfillUntilCovered = false)
@@ -96,6 +104,7 @@ public class YahooDataFetcher
 
         var totalWrites = 0;
         var fetchRound = 0;
+        var fetchedMetadata = false;
 
         while (true)
         {
@@ -113,6 +122,7 @@ public class YahooDataFetcher
                         ticker,
                         name,
                         metadata.Name);
+                    fetchedMetadata = true;
                 }
 
                 _logger.LogInformation("Prices already cached for {Ticker} from {From:d} to {To:d}", ticker, from, to);
@@ -192,6 +202,7 @@ public class YahooDataFetcher
         }
 
         _logger.LogInformation("Upserted {Count} candles for {Ticker}", totalWrites, ticker);
+        return fetchRound > 0 || fetchedMetadata;
     }
 
     /// <summary>Load sorted daily prices for a ticker from MongoDB.</summary>
@@ -208,6 +219,44 @@ public class YahooDataFetcher
             .Find(filter)
             .SortBy(p => p.Date)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Fetch daily candles from Yahoo (without storing) and compute the mean daily volume per ticker.
+    /// Days with no reported volume count as zero. Tickers with no data or a failed fetch
+    /// are returned with a null AverageVolume and an Error message.
+    /// </summary>
+    public async Task<List<TickerVolumeStat>> GetAverageDailyVolumesAsync(
+        IReadOnlyList<(string Ticker, string Name, string Sector)> tickers,
+        DateTime from,
+        DateTime to,
+        Action<string, int, int>? onProgress = null)
+    {
+        var stats = new List<TickerVolumeStat>(tickers.Count);
+
+        for (int i = 0; i < tickers.Count; i++)
+        {
+            var (symbol, name, sector) = tickers[i];
+            onProgress?.Invoke(symbol, i + 1, tickers.Count);
+
+            try
+            {
+                var candles = (await GetHistoricalWithRetryAsync(symbol, from, to)).Candles;
+                stats.Add(candles.Count == 0
+                    ? new TickerVolumeStat(symbol, name, sector, null, 0, "No data returned")
+                    : new TickerVolumeStat(symbol, name, sector, candles.Average(c => (double)c.Volume), candles.Count, null));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Failed to fetch volume for {Ticker}: {Message}", symbol, ex.Message);
+                stats.Add(new TickerVolumeStat(symbol, name, sector, null, 0, ex.Message));
+            }
+
+            if (i < tickers.Count - 1)
+                await Task.Delay(DelayBetweenTickersMs);
+        }
+
+        return stats;
     }
 
     public async Task<StockInfo?> GetStockInfoAsync(string ticker)
@@ -420,7 +469,8 @@ public class YahooDataFetcher
 
     private static bool IsRecentRange(DateTime from, DateTime to)
     {
-        return (to.Date - from.Date).TotalDays <= InitialBootstrapDays + 1;
+        return (to.Date - from.Date).TotalDays <= InitialBootstrapDays + 1
+            && to.Date >= DateTime.UtcNow.Date.AddDays(-1);
     }
 
     private static HttpClient CreateHttpClient()
@@ -459,12 +509,15 @@ public class YahooDataFetcher
 
         if (existingCount < MinimumBootstrapRows || !existingFrom.HasValue || !existingTo.HasValue)
         {
-            var bootstrapFrom = MaxDate(from.Date, to.Date.AddDays(-InitialBootstrapDays));
+            var bootstrapFrom = (to.Date - from.Date).TotalDays <= MaxDirectFetchDays
+                ? from.Date
+                : MaxDate(from.Date, to.Date.AddDays(-InitialBootstrapDays));
             return new List<(DateTime From, DateTime To)> { (bootstrapFrom, to.Date) };
         }
 
         var ranges = new List<(DateTime From, DateTime To)>();
-        if (existingFrom.Value.Date > from.Date)
+        // Tolerate weekends/holidays at the start of the window so they don't trigger a refetch every run.
+        if (existingFrom.Value.Date > from.Date.AddDays(StartGapToleranceDays))
         {
             var backfillTo = existingFrom.Value.Date.AddDays(-1);
             var backfillFrom = MaxDate(from.Date, backfillTo.AddDays(-HistoricalBackfillChunkDays));
@@ -497,6 +550,14 @@ public class YahooDataFetcher
 
         return price?.Date;
     }
+
+    public sealed record TickerVolumeStat(
+        string Ticker,
+        string Name,
+        string Sector,
+        double? AverageVolume,
+        int Bars,
+        string? Error);
 
     private sealed record YahooChartData(
         IReadOnlyList<PriceCandle> Candles,

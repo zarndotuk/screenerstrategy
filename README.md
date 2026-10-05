@@ -32,13 +32,29 @@ dotnet run --project KlseBacktester.Console
 
 | # | Option | Description |
 |---|--------|-------------|
-| 1 | **Populate DB** | Fetches 2 years of daily OHLCV from Yahoo Finance for all KLSE tickers + SPY |
+| 1 | **Populate DB** | Fetches the last `PopulateMonths` (default 3) months of daily OHLCV from Yahoo Finance for the configured `KlseStocks` (no indicator warmup) |
 | 2 | **Run Backtest** | Applies the score strategy to all tickers; persists buy/sell lifecycle to MongoDB |
 | 3 | **Buy Signals** | Lists stocks with an **open (unsold) buy signal** within the last N days |
 | 4 | **Performance** | Leaderboard ranked by total return across all closed trades |
 | 5 | **Closed Trades** | All completed buy→sell round-trips with buy price, sell price, P&L % |
 | 6 | **Ticker Detail** | Full history for a single stock |
-| 7 | **Settings** | View current config (edit `appsettings.json` to change) |
+| 7 | **Data Quality** | Bar counts & warmup status per ticker |
+| 8 | **Settings** | View current config (edit `appsettings.json` to change) |
+| 9 | **Screen Active** | Ranks `KlseStockUniverse` by average daily volume over `ActivityLookbackDays` and rewrites `KlseStocks` with the top `ActiveStockCount` |
+
+### Command line
+
+```bash
+# Rank the universe, keep the most active stocks, then fetch 3 months of prices for them
+dotnet run --project KlseBacktester.Console -- screen-active populate
+```
+
+`screen-active` (or `screen`) and `populate` can also be run on their own.
+
+```bash
+# Per-bar indicators and buy gates (setup, breakout, trend quality, confirm) for one stock
+dotnet run --project KlseBacktester.Console -- diagnose 0225
+```
 
 ---
 
@@ -114,11 +130,30 @@ Designed so the **Next.js app** can query these directly:
   "MongoConnectionString": "mongodb://localhost:27017",
   "DatabaseName": "klse_backtest",
   "DefaultLookbackDays": 730,
-  "RecentSignalDays": 5
+  "RecentSignalDays": 5,
+  "WarmupBars": 50,
+  "PopulateMonths": 3,
+  "ActivityLookbackDays": 365,
+  "ActiveStockCount": 50,
+  "KlseStocks": [],
+  "KlseStockUniverse": [ { "Ticker": "8869.KL", "Name": "...", "Sector": "..." } ]
 }
 ```
 
 `RecentSignalDays` controls the default filter for the **Buy Signals** screen.
+
+- `KlseStockUniverse` is the full candidate list used by **Screen Active**.
+- `KlseStocks` is the working list used by Populate / Backtest. It is overwritten by **Screen Active**
+  (in both the project's `appsettings.json` and the `bin/` copy). When empty, the universe is used.
+- Populate stores only `PopulateMonths` of prices. Backtests refresh the same window (they don't fetch older history).
+- `WarmupBars` (default 50, minimum 50) is how many stored bars are skipped before signals may fire.
+  Until a stock has 200 bars, EMA50 stands in for EMA200 in the trend gate and the
+  "EMA50 > EMA200" entry point scores 0 (max entry score 9 instead of 10).
+  Set `WarmupBars` to 600 and raise `PopulateMonths` (~30) for full EMA200 convergence.
+- `Strategy` holds the ScoreEngine parameters. Two are tuned for earlier entries:
+  - `AllowSetupBarBreakout: true` lets a breakout on the same bar as the score setup confirm the buy (no 1-bar lag).
+  - `BreakoutCloseNearHighPercent: 0.5` accepts breakout bars closing in the top half of their range (was 0.70).
+- Flat zero-volume bars (Bursa holidays reported by Yahoo) are dropped before scoring.
 
 ---
 

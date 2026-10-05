@@ -12,10 +12,17 @@ internal class Program
 
         var app = serviceProvider.GetRequiredService<BacktesterConsoleApp>();
 
-        if (args.Any(arg => string.Equals(arg, "populate", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(arg, "populate-db", StringComparison.OrdinalIgnoreCase)))
+        var screen = args.Any(arg => string.Equals(arg, "screen-active", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(arg, "screen", StringComparison.OrdinalIgnoreCase));
+        var populate = args.Any(arg => string.Equals(arg, "populate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(arg, "populate-db", StringComparison.OrdinalIgnoreCase));
+
+        if (screen || populate)
         {
-            await app.PopulateDbAsync();
+            if (screen)
+                await app.ScreenActiveStocksAsync();
+            if (populate)
+                await app.PopulateDbAsync();
             return;
         }
 
@@ -49,6 +56,13 @@ internal class Program
             && DateTime.TryParse(args[2], out var callDate))
         {
             await app.ShowCallsForDateAsync(args[1], callDate);
+            return;
+        }
+
+        if (args.Length >= 2
+            && string.Equals(args[0], "diagnose", StringComparison.OrdinalIgnoreCase))
+        {
+            await app.ShowDiagnosticsAsync(args[1]);
             return;
         }
 

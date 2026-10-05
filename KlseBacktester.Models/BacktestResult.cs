@@ -37,7 +37,29 @@ public class ScoreEvaluation
     public List<Signal> Signals { get; set; } = new();
     public List<ScoreCall> Calls { get; set; } = new();
     public List<RetestConfirmation> Confirmations { get; set; } = new();
+
+    /// <summary>Per-bar diagnostics (not persisted) — used by the "diagnose" command.</summary>
+    public List<BarTrace> Trace { get; set; } = new();
 }
+
+/// <summary>Snapshot of indicators and buy gates for a single evaluated bar.</summary>
+public record BarTrace(
+    DateTime Date,
+    decimal Close,
+    decimal Ema20,
+    decimal Ema50,
+    decimal Rsi,
+    decimal VolumeRatio,
+    int EntryScore,
+    int ExitScore,
+    bool HasSetup,
+    bool Breakout,
+    bool TrendQuality,
+    bool HeldAboveLongEma,
+    bool BuyConfirm,
+    bool InTrade,
+    bool BuySignal,
+    bool SellSignal);
 
 public class Signal
 {

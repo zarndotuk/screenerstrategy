@@ -44,9 +44,6 @@ public class BacktestRunner
         string ticker, DateTime backtestFrom, DateTime backtestTo,
         string name = "", string sector = "")
     {
-        // Extend fetch window back by warmup period
-        DateTime fetchFrom = WarmupCalculator.FetchFrom(backtestFrom);
-
         if (string.IsNullOrWhiteSpace(name)
             || string.Equals(name, ticker, StringComparison.OrdinalIgnoreCase))
         {
@@ -62,34 +59,9 @@ public class BacktestRunner
             }
         }
 
-        var prices = await _fetcher.GetPricesAsync(ticker, fetchFrom, backtestTo);
-
-        if (prices.Count < WarmupCalculator.WarmupBars)
-        {
-            // Not enough for full warmup — warn but continue with what we have
-            // (some stocks listed more recently may have less history)
-            Console.WriteLine(
-                $"  [WARN] {ticker}: {prices.Count} bars fetched " +
-                $"(recommended: {WarmupCalculator.WarmupBars}). " +
-                $"Signals from early in the window may be unreliable.");
-        }
-
-        if (prices.Count < 50)
-            throw new InvalidOperationException(
-                $"{ticker}: only {prices.Count} bars — too few to run any indicators.");
-
-        // Determine where signals may start (after warmup)
-        var dates           = prices.Select(p => p.Date).ToList();
-        int signalStartIdx  = WarmupCalculator.GetSignalStartIndex(dates, backtestFrom);
-        var (warmup, usable) = WarmupCalculator.Split(prices.Count);
-
-        // KLSE-only runs do not fetch or persist SPY. An empty proxy array makes
-        // ScoreEngine treat the market filter as bullish.
-        var marketProxyClose = Array.Empty<decimal>();
-
-        // ── Score engine — signals only fire after warmup ──
-        var evaluation = _engine.EvaluateWithCalls(prices, marketProxyClose, signalStartIdx);
+        var (prices, evaluation) = await EvaluateAsync(ticker, backtestFrom, backtestTo);
         var signals = evaluation.Signals;
+        var (warmup, usable) = WarmupCalculator.Split(prices.Count);
 
         // ── Build trades + persist signal lifecycle ──
         var trades = await BuildTradesAndPersistAsync(signals, ticker, name, sector);
@@ -122,6 +94,47 @@ public class BacktestRunner
             new ReplaceOptions { IsUpsert = true });
 
         return result;
+    }
+
+    /// <summary>
+    /// Load stored prices and run the score engine without persisting anything.
+    /// </summary>
+    public async Task<(List<StockPrice> Prices, ScoreEvaluation Evaluation)> EvaluateAsync(
+        string ticker, DateTime backtestFrom, DateTime backtestTo)
+    {
+        // Extend fetch window back by warmup period
+        DateTime fetchFrom = WarmupCalculator.FetchFrom(backtestFrom);
+
+        // Yahoo emits flat zero-volume bars on Bursa holidays (e.g. 31 Aug); they aren't
+        // trading sessions and would distort volume averages and breakout windows.
+        var prices = (await _fetcher.GetPricesAsync(ticker, fetchFrom, backtestTo))
+            .Where(p => !(p.Volume == 0 && p.High == p.Low))
+            .ToList();
+
+        if (prices.Count < WarmupCalculator.WarmupBars)
+        {
+            // Not enough for full warmup — warn but continue with what we have
+            // (some stocks listed more recently may have less history)
+            Console.WriteLine(
+                $"  [WARN] {ticker}: {prices.Count} bars fetched " +
+                $"(recommended: {WarmupCalculator.WarmupBars}). " +
+                $"Signals from early in the window may be unreliable.");
+        }
+
+        if (prices.Count < WarmupCalculator.MinimumBars)
+            throw new InvalidOperationException(
+                $"{ticker}: only {prices.Count} bars — too few to run any indicators.");
+
+        // Determine where signals may start (after warmup)
+        var dates          = prices.Select(p => p.Date).ToList();
+        int signalStartIdx = WarmupCalculator.GetSignalStartIndex(dates, backtestFrom);
+
+        // KLSE-only runs do not fetch or persist SPY. An empty proxy array makes
+        // ScoreEngine treat the market filter as bullish.
+        var marketProxyClose = Array.Empty<decimal>();
+
+        // ── Score engine — signals only fire after warmup ──
+        return (prices, _engine.EvaluateWithCalls(prices, marketProxyClose, signalStartIdx));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

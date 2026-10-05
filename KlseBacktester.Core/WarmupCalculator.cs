@@ -13,25 +13,35 @@ namespace KlseBacktester.Core;
 ///   recentHigh = ta.highest(high, 20)[1] → needs 21 bars
 ///   recentLow  = ta.lowest(low,  10)[1]  → needs 11 bars
 ///
-/// Dominant constraint: EMA200 convergence = 600 trading bars ≈ 2.4 calendar years.
+/// Full EMA200 convergence = 600 trading bars ≈ 2.4 calendar years.
+/// Short-data mode (default 50 bars) starts signals once EMA50 is seeded; the
+/// ScoreEngine substitutes EMA50 for EMA200 until EMA200 has enough bars.
 ///
 /// We fetch: warmupBars + backtestDays of data.
 /// We only emit signals starting from the first bar AFTER the warmup window.
 /// </summary>
 public static class WarmupCalculator
 {
+    /// <summary>Absolute minimum bars: EMA50 seed. Warmup can't go below this.</summary>
+    public const int MinimumBars = 50;
+
+    /// <summary>Bars needed for full EMA200 convergence (3× period).</summary>
+    public const int FullConvergenceBars = 600;
+
     /// <summary>
-    /// Minimum trading bars needed before any indicator is considered reliable.
-    /// EMA200 convergence (3× period) dominates at 600 bars.
+    /// Trading bars skipped before signals may be emitted. Configurable via <see cref="Configure"/>.
     /// </summary>
-    public const int WarmupBars = 600;
+    public static int WarmupBars { get; private set; } = MinimumBars;
 
     /// <summary>
     /// Approximate calendar days needed for WarmupBars of trading data.
-    /// Bursa Malaysia trades ~252 days/year.
-    /// 600 bars ÷ 252 × 365 ≈ 869 calendar days ≈ round up to 900 for safety.
+    /// Bursa Malaysia trades ~252 days/year → ×1.45, rounded up to ×1.5 for safety
+    /// (600 bars → 900 days, 50 bars → 75 days).
     /// </summary>
-    public const int WarmupCalendarDays = 900;
+    public static int WarmupCalendarDays => (int)Math.Ceiling(WarmupBars * 1.5);
+
+    public static void Configure(int warmupBars) =>
+        WarmupBars = Math.Max(MinimumBars, warmupBars);
 
     /// <summary>
     /// Given the desired backtest window, return the fetch start date
@@ -80,8 +90,8 @@ public static class WarmupCalculator
     /// </summary>
     public static IEnumerable<(string Indicator, int BarsNeeded, string Note)> Requirements()
     {
-        yield return ("EMA200",       600, "3× period — dominant constraint");
-        yield return ("EMA50",        150, "3× period");
+        yield return ("EMA200",       600, "3× period — optional; EMA50 substitutes below 200 bars");
+        yield return ("EMA50",        150, "3× period — seeded at 50 bars (minimum warmup)");
         yield return ("EMA20",         60, "3× period");
         yield return ("RSI(14)",       50, "Wilder smoothing convergence");
         yield return ("ATR(14)",       50, "Wilder smoothing convergence");

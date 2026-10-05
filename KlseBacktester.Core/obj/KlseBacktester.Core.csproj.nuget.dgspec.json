@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Core\\KlseBacktester.Core.csproj": {}
+    "C:\\Develop\\screenerstrategy\\KlseBacktester.Core\\KlseBacktester.Core.csproj": {}
   },
   "projects": {
-    "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Core\\KlseBacktester.Core.csproj": {
+    "C:\\Develop\\screenerstrategy\\KlseBacktester.Core\\KlseBacktester.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Core\\KlseBacktester.Core.csproj",
+        "projectUniqueName": "C:\\Develop\\screenerstrategy\\KlseBacktester.Core\\KlseBacktester.Core.csproj",
         "projectName": "KlseBacktester.Core",
-        "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Core\\KlseBacktester.Core.csproj",
-        "packagesPath": "C:\\Users\\hassa\\.nuget\\packages\\",
-        "outputPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Core\\obj\\",
+        "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Core\\KlseBacktester.Core.csproj",
+        "packagesPath": "C:\\Users\\Hassan_Humayun\\.nuget\\packages\\",
+        "outputPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\hassa\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Hassan_Humayun\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -27,18 +27,20 @@
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "C:\\Program Files\\dotnet\\library-packs": {},
-          "https://api.nuget.org/v3/index.json": {}
+          "https://api.nuget.org/v3/index.json": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/csb-nuget": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/nuget": {},
+          "https://dcsartifacts.dell.com/artifactory/api/nuget/nuget": {}
         },
         "frameworks": {
           "net8.0": {
-            "framework": "net8.0",
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\KlseBacktester.Data.csproj": {
-                "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\KlseBacktester.Data.csproj"
+              "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\KlseBacktester.Data.csproj": {
+                "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\KlseBacktester.Data.csproj"
               },
-              "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
-                "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj"
+              "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
+                "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj"
               }
             }
           }
@@ -56,7 +58,6 @@
       },
       "frameworks": {
         "net8.0": {
-          "framework": "net8.0",
           "targetAlias": "net8.0",
           "imports": [
             "net461",
@@ -74,24 +75,24 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.425/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\KlseBacktester.Data.csproj": {
+    "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\KlseBacktester.Data.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\KlseBacktester.Data.csproj",
+        "projectUniqueName": "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\KlseBacktester.Data.csproj",
         "projectName": "KlseBacktester.Data",
-        "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\KlseBacktester.Data.csproj",
-        "packagesPath": "C:\\Users\\hassa\\.nuget\\packages\\",
-        "outputPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Data\\obj\\",
+        "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\KlseBacktester.Data.csproj",
+        "packagesPath": "C:\\Users\\Hassan_Humayun\\.nuget\\packages\\",
+        "outputPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Data\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\hassa\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Hassan_Humayun\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -101,15 +102,17 @@
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "C:\\Program Files\\dotnet\\library-packs": {},
-          "https://api.nuget.org/v3/index.json": {}
+          "https://api.nuget.org/v3/index.json": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/csb-nuget": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/nuget": {},
+          "https://dcsartifacts.dell.com/artifactory/api/nuget/nuget": {}
         },
         "frameworks": {
           "net8.0": {
-            "framework": "net8.0",
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
-                "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj"
+              "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
+                "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj"
               }
             }
           }
@@ -127,7 +130,6 @@
       },
       "frameworks": {
         "net8.0": {
-          "framework": "net8.0",
           "targetAlias": "net8.0",
           "dependencies": {
             "Microsoft.Extensions.Logging.Abstractions": {
@@ -155,24 +157,24 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.425/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
+    "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj",
+        "projectUniqueName": "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj",
         "projectName": "KlseBacktester.Models",
-        "projectPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\KlseBacktester.Models.csproj",
-        "packagesPath": "C:\\Users\\hassa\\.nuget\\packages\\",
-        "outputPath": "C:\\Develop\\KlseBacktester\\KlseBacktester\\KlseBacktester.Models\\obj\\",
+        "projectPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\KlseBacktester.Models.csproj",
+        "packagesPath": "C:\\Users\\Hassan_Humayun\\.nuget\\packages\\",
+        "outputPath": "C:\\Develop\\screenerstrategy\\KlseBacktester.Models\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\hassa\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Hassan_Humayun\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -182,11 +184,13 @@
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "C:\\Program Files\\dotnet\\library-packs": {},
-          "https://api.nuget.org/v3/index.json": {}
+          "https://api.nuget.org/v3/index.json": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/csb-nuget": {},
+          "https://artifacts.dell.com/artifactory/api/nuget/nuget": {},
+          "https://dcsartifacts.dell.com/artifactory/api/nuget/nuget": {}
         },
         "frameworks": {
           "net8.0": {
-            "framework": "net8.0",
             "targetAlias": "net8.0",
             "projectReferences": {}
           }
@@ -204,7 +208,6 @@
       },
       "frameworks": {
         "net8.0": {
-          "framework": "net8.0",
           "targetAlias": "net8.0",
           "dependencies": {
             "MongoDB.Bson": {
@@ -228,7 +231,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.425/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

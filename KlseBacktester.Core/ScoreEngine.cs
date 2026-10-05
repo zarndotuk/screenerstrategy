@@ -31,6 +31,8 @@ public class ScoreEngine
     public int RequiredClosesAboveEma200 { get; init; } = 5;
     public bool AllowSameBarBreakoutEntry { get; init; } = true;
     public int SameBarBreakoutMinScore { get; init; } = 9;
+    /// <summary>When true, a qualifying breakout on the setup bar itself confirms the entry (no 1-bar lag).</summary>
+    public bool AllowSetupBarBreakout { get; init; } = false;
 
     /// <summary>
     /// Run the scoring engine over the full price series.
@@ -41,7 +43,7 @@ public class ScoreEngine
     public List<Signal> Evaluate(
         List<StockPrice> prices,
         decimal[] spyClose,
-        int signalStartIndex = WarmupCalculator.WarmupBars)
+        int? signalStartIndex = null)
     {
         return EvaluateWithCalls(prices, spyClose, signalStartIndex).Signals;
     }
@@ -49,16 +51,16 @@ public class ScoreEngine
     public ScoreEvaluation EvaluateWithCalls(
         List<StockPrice> prices,
         decimal[] spyClose,
-        int signalStartIndex = WarmupCalculator.WarmupBars)
+        int? signalStartIndex = null)
     {
         int n = prices.Count;
         if (n < WarmupCalculator.WarmupBars)
         {
             Console.WriteLine(
-                $"  [WARN] Only {n} bars — need {WarmupCalculator.WarmupBars} for reliable EMA200. " +
+                $"  [WARN] Only {n} bars — need {WarmupCalculator.WarmupBars} warmup bars. " +
                 $"Signals may be unreliable.");
         }
-        if (n < 50) return new ScoreEvaluation();  // absolute minimum to do anything useful
+        if (n < WarmupCalculator.MinimumBars) return new ScoreEvaluation();  // EMA50 must be seeded
 
         // ── Build arrays ──
         var close  = prices.Select(p => p.Close).ToArray();
@@ -106,10 +108,16 @@ public class ScoreEngine
 
         // Start loop from signalStartIndex so all indicators have had
         // sufficient history to converge before any signal is emitted.
-        int loopStart = Math.Max(signalStartIndex, 200); // 200 is absolute floor for EMA200 array
+        int loopStart = Math.Max(signalStartIndex ?? WarmupCalculator.WarmupBars, WarmupCalculator.MinimumBars);
         for (int i = loopStart; i < n; i++)
         {
             bool recentSignal = lastSignalBar >= 0 && (i - lastSignalBar) < CooldownBars;
+
+            // EMA200 is zero until 200 bars exist. Until then EMA50 stands in as the
+            // long-trend baseline and the EMA50 > EMA200 condition scores nothing.
+            bool ema200Ready = ema200[i] > 0;
+            var longEma = ema200Ready ? ema200 : ema50;
+            int longSlopeLookback = ema200Ready ? LongTrendSlopeLookback : TrendSlopeLookback;
 
             // Market bullish: SPY close > SPY EMA50
             bool marketBull = i < spyClose.Length && spyEma50[i] > 0
@@ -121,7 +129,7 @@ public class ScoreEngine
             {
                 CloseAboveEma20      = close[i] > ema20[i],
                 Ema20AboveEma50      = ema20[i] > ema50[i],
-                Ema50AboveEma200     = ema50[i] > ema200[i],
+                Ema50AboveEma200     = ema200Ready && ema50[i] > ema200[i],
                 RsiBetween55And70    = rsi[i] > 55 && rsi[i] < 70,
                 VolumeAbove1_5x      = avgVol[i] > 0 && volume[i] > avgVol[i] * 1.5m,
                 VolumeAbove2x        = avgVol[i] > 0 && volume[i] > avgVol[i] * 2.0m,
@@ -165,19 +173,20 @@ public class ScoreEngine
             exitScore += xb.OverboughtExtension? 1 : 0;
 
             // ── Signal logic ──
-            bool ema20Rising = i >= TrendSlopeLookback && ema20[i] > ema20[i - TrendSlopeLookback];
-            bool ema50Rising = i >= TrendSlopeLookback && ema50[i] > ema50[i - TrendSlopeLookback];
-            bool ema200Rising = i >= LongTrendSlopeLookback && ema200[i] > ema200[i - LongTrendSlopeLookback];
-            bool heldAboveEma200 = HasRecentClosesAbove(close, ema200, i, RequiredClosesAboveEma200);
+            bool ema20Rising = IsRising(ema20, i, TrendSlopeLookback);
+            bool ema50Rising = IsRising(ema50, i, TrendSlopeLookback);
+            bool longEmaRising = IsRising(longEma, i, longSlopeLookback);
+            bool heldAboveLongEma = HasRecentClosesAbove(close, longEma, i, RequiredClosesAboveEma200);
+            bool longTrendUp = ema200Ready ? ema50[i] > ema200[i] : ema50Rising;
             bool strongTrend = close[i] > ema20[i]
                                && ema20[i] > ema50[i]
-                               && ema50[i] > ema200[i]
+                               && longTrendUp
                                && ema20Rising
                                && ema50Rising;
-            bool trendQuality = close[i] > ema200[i]
+            bool trendQuality = close[i] > longEma[i]
                                 && ema50Rising
-                                && ema200Rising
-                                && heldAboveEma200;
+                                && longEmaRising
+                                && heldAboveLongEma;
             bool notOverextended = atr[i] <= 0
                                    || close[i] - ema20[i] <= atr[i] * MaxEntryAtrExtension;
             bool buyCall = entryScore >= EntryMinScore;
@@ -217,13 +226,13 @@ public class ScoreEngine
 
             bool buyBreakoutAfterSetup = breakout
                                          && buySetupBar >= 0
-                                         && i > buySetupBar;
+                                         && (AllowSetupBarBreakout ? i >= buySetupBar : i > buySetupBar);
             bool sameBarBreakoutEntry = AllowSameBarBreakoutEntry
                                         && buyCall
                                         && !inTrade
                                         && entryScore >= SameBarBreakoutMinScore
                                         && eb.BreakoutAboveRecentHigh
-                                        && eb.Ema50AboveEma200
+                                        && longTrendUp
                                         && !eb.Ema20AboveEma50
                                         && eb.CandleBullish
                                         && eb.VolumeAbove2x;
@@ -360,6 +369,24 @@ public class ScoreEngine
                 });
             }
 
+            evaluation.Trace.Add(new BarTrace(
+                Date:             prices[i].Date,
+                Close:            close[i],
+                Ema20:            ema20[i],
+                Ema50:            ema50[i],
+                Rsi:              rsi[i],
+                VolumeRatio:      avgVol[i] > 0 ? volume[i] / avgVol[i] : 0,
+                EntryScore:       entryScore,
+                ExitScore:        exitScore,
+                HasSetup:         buySetupBar >= 0,
+                Breakout:         breakout,
+                TrendQuality:     trendQuality,
+                HeldAboveLongEma: heldAboveLongEma,
+                BuyConfirm:       buyConfirm,
+                InTrade:          inTrade,
+                BuySignal:        buySignal,
+                SellSignal:       sellSignal && !buySignal));
+
             if (buySignal)
             {
                 inTrade       = true;
@@ -438,6 +465,30 @@ public class ScoreEngine
         return evaluation;
     }
 
+    /// <summary>
+    /// First index in [from, index] where the series is seeded (non-zero). Indicator arrays are
+    /// zero until their period has elapsed, so on short histories the lookback window is
+    /// clamped to the seeded part instead of failing outright.
+    /// </summary>
+    private static int FirstSeeded(decimal[] series, int from, int index)
+    {
+        from = Math.Max(0, from);
+        while (from < index && series[from] <= 0)
+            from++;
+        return from;
+    }
+
+    /// <summary>True when the series rose over the lookback (clamped to its seeded bars).</summary>
+    private static bool IsRising(decimal[] series, int index, int lookback)
+    {
+        int from = FirstSeeded(series, index - lookback, index);
+        return from < index && series[index] > series[from];
+    }
+
+    /// <summary>
+    /// True when the last <paramref name="bars"/> closes are above the baseline. On short
+    /// histories the window is clamped to bars where the baseline is seeded (minimum 2 bars).
+    /// </summary>
     private static bool HasRecentClosesAbove(
         decimal[] close,
         decimal[] baseline,
@@ -447,12 +498,13 @@ public class ScoreEngine
         if (bars <= 1)
             return close[index] > baseline[index];
 
-        if (index < bars - 1)
+        int from = FirstSeeded(baseline, index - bars + 1, index);
+        if (index - from + 1 < 2)
             return false;
 
-        for (int i = index - bars + 1; i <= index; i++)
+        for (int i = from; i <= index; i++)
         {
-            if (baseline[i] <= 0 || close[i] <= baseline[i])
+            if (close[i] <= baseline[i])
                 return false;
         }
 

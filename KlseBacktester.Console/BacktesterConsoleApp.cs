@@ -8,7 +8,7 @@ namespace KlseBacktester.Console;
 public class BacktesterConsoleApp
 {
     private readonly AppSettings _settings;
-    private readonly IReadOnlyList<(string Ticker, string Name, string Sector)> _klseStocks;
+    private IReadOnlyList<(string Ticker, string Name, string Sector)> _klseStocks;
     private readonly YahooDataFetcher _fetcher;
     private readonly SignalRepository _signalRepo;
     private readonly ScoreEngine _engine;
@@ -42,7 +42,7 @@ public class BacktesterConsoleApp
                     .Title("[bold]What would you like to do?[/]")
                     .PageSize(12)
                     .AddChoices(
-                        "1. Populate DB  - fetch price history for configured KLSE stocks",
+                        $"1. Populate DB  - fetch last {_settings.PopulateMonths} months of prices for configured KLSE stocks",
                         "2. Run Backtest - fetch data and backtest configured KLSE stocks",
                         "3. Buy Signals  - stocks with active buy signal (last N days)",
                         "4. Performance  - leaderboard ranked by total return",
@@ -50,6 +50,7 @@ public class BacktesterConsoleApp
                         "6. Ticker Detail - drill into a specific stock",
                         "7. Data Quality - check bar counts & warmup status per ticker",
                         "8. Settings     - view current configuration",
+                        $"9. Screen Active - rank universe by {_settings.ActivityLookbackDays}d avg volume, keep top {_settings.ActiveStockCount}",
                         "0. Exit"));
 
             AnsiConsole.WriteLine();
@@ -80,6 +81,9 @@ public class BacktesterConsoleApp
                 case '8':
                     ShowSettings();
                     break;
+                case '9':
+                    await ScreenActiveStocksAsync();
+                    break;
                 case '0':
                     AnsiConsole.MarkupLine("[dim]Goodbye.[/]");
                     return;
@@ -96,18 +100,15 @@ public class BacktesterConsoleApp
 
     public async Task PopulateDbAsync()
     {
-        var backtestFrom = DateTime.Today.AddDays(-_settings.DefaultLookbackDays);
-        var backtestTo = DateTime.Today;
-        var fetchFrom = WarmupCalculator.FetchFrom(backtestFrom);
-        var warmupDays = (int)(backtestFrom - fetchFrom).TotalDays;
+        var fetchTo = DateTime.Today;
+        var fetchFrom = fetchTo.AddMonths(-_settings.PopulateMonths);
 
         AnsiConsole.MarkupLine(
             $"Fetching [bold]{_klseStocks.Count}[/] configured KLSE tickers");
         AnsiConsole.Write(new Panel(
-            $"Backtest window:  [yellow]{backtestFrom:dd MMM yyyy}[/] -> [yellow]{backtestTo:dd MMM yyyy}[/]\n" +
-            $"Fetch from:       [yellow]{fetchFrom:dd MMM yyyy}[/] (+ {warmupDays} days warmup)\n" +
-            $"Warmup bars:      [yellow]{WarmupCalculator.WarmupBars} trading bars[/] for EMA200 convergence\n" +
-            $"Total fetch span: [yellow]{(int)(backtestTo - fetchFrom).TotalDays} calendar days[/]")
+            $"Fetch window:     [yellow]{fetchFrom:dd MMM yyyy}[/] -> [yellow]{fetchTo:dd MMM yyyy}[/] (last {_settings.PopulateMonths} months)\n" +
+            $"Total fetch span: [yellow]{(int)(fetchTo - fetchFrom).TotalDays} calendar days[/]\n" +
+            $"[dim]Backtests skip the first {WarmupCalculator.WarmupBars} bars as warmup before emitting signals.[/]")
         {
             Header = new PanelHeader("[bold] Data Fetch Plan [/]"),
             Border = BoxBorder.Rounded,
@@ -118,10 +119,89 @@ public class BacktesterConsoleApp
 
         await ConsoleRenderer.RunWithProgressAsync("Fetching prices", async onProgress =>
         {
-            await _fetcher.PopulateAsync(_klseStocks, fetchFrom, backtestTo, onProgress);
+            await _fetcher.PopulateAsync(_klseStocks, fetchFrom, fetchTo, onProgress);
         });
 
         ConsoleRenderer.Ok($"\nDone. Prices stored in MongoDB '[bold]{_settings.DatabaseName}[/]'.");
+    }
+
+    public async Task ScreenActiveStocksAsync()
+    {
+        var universe = Startup.NormalizeStocks(_settings.KlseStockUniverse);
+        if (universe.Count == 0)
+            universe = _klseStocks.ToList();
+
+        var to = DateTime.Today;
+        var from = to.AddDays(-_settings.ActivityLookbackDays);
+        var keep = Math.Max(1, _settings.ActiveStockCount);
+
+        AnsiConsole.MarkupLine(
+            $"Ranking [bold]{universe.Count}[/] universe tickers by average daily volume " +
+            $"([yellow]{from:dd MMM yyyy}[/] -> [yellow]{to:dd MMM yyyy}[/]), keeping top [bold]{keep}[/]\n");
+
+        var stats = new List<YahooDataFetcher.TickerVolumeStat>();
+        await ConsoleRenderer.RunWithProgressAsync("Fetching volumes", async onProgress =>
+        {
+            stats = await _fetcher.GetAverageDailyVolumesAsync(universe, from, to, onProgress);
+        });
+
+        var ranked = stats
+            .Where(s => s.AverageVolume.HasValue)
+            .OrderByDescending(s => s.AverageVolume)
+            .ToList();
+        var top = ranked.Take(keep).ToList();
+        var failed = stats.Where(s => !s.AverageVolume.HasValue).ToList();
+
+        var table = new Table()
+            .Title($"[bold]Top {top.Count} Most Active (avg daily volume)[/]")
+            .Border(TableBorder.Rounded)
+            .AddColumn(new TableColumn("[bold]#[/]").RightAligned())
+            .AddColumn("[bold]Ticker[/]")
+            .AddColumn("[bold]Name[/]")
+            .AddColumn(new TableColumn("[bold]Avg Volume[/]").RightAligned())
+            .AddColumn(new TableColumn("[bold]Bars[/]").RightAligned());
+
+        for (var i = 0; i < top.Count; i++)
+        {
+            var s = top[i];
+            table.AddRow(
+                (i + 1).ToString(),
+                $"[cyan]{Markup.Escape(s.Ticker)}[/]",
+                Markup.Escape(s.Name.Length > 30 ? s.Name[..30] + "..." : s.Name),
+                s.AverageVolume!.Value.ToString("N0"),
+                s.Bars.ToString());
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(table);
+
+        if (failed.Count > 0)
+        {
+            ConsoleRenderer.Warn($"\n{failed.Count} ticker(s) skipped (not ranked):");
+            foreach (var f in failed)
+                ConsoleRenderer.Info($"  {Markup.Escape(f.Ticker)}: {Markup.Escape(f.Error ?? "unknown error")}");
+        }
+
+        if (top.Count == 0)
+        {
+            ConsoleRenderer.Error("\nNo tickers could be ranked; appsettings.json was not changed.");
+            return;
+        }
+
+        var written = AppSettingsWriter.WriteKlseStocks(top.Select(s => new StockDefinition
+        {
+            Ticker = s.Ticker,
+            Name = s.Name,
+            Sector = s.Sector,
+        }));
+
+        _klseStocks = top.Select(s => (s.Ticker, s.Name, s.Sector)).ToList();
+
+        AnsiConsole.WriteLine();
+        if (written.Count == 0)
+            ConsoleRenderer.Warn("appsettings.json not found; filtered list applied to this session only.");
+        foreach (var path in written)
+            ConsoleRenderer.Ok($"Updated KlseStocks ({top.Count}) in {Markup.Escape(path)}");
     }
 
     public async Task RunBacktestAsync(string? ticker = null, bool promptForTicker = false)
@@ -132,18 +212,19 @@ public class BacktesterConsoleApp
 
         var backtestFrom = DateTime.Today.AddDays(-_settings.DefaultLookbackDays);
         var backtestTo = DateTime.Today;
-        var fetchFrom = WarmupCalculator.FetchFrom(backtestFrom);
+        // Only refresh the populate window so the DB stays at PopulateMonths of history.
+        var refreshFrom = backtestTo.AddMonths(-_settings.PopulateMonths);
 
         AnsiConsole.MarkupLine(
             $"Running backtest on [bold]{selectedStocks.Count}[/] configured KLSE ticker(s) | " +
             $"Signal window: [yellow]{backtestFrom:dd MMM yyyy}[/] -> [yellow]{backtestTo:dd MMM yyyy}[/]");
         AnsiConsole.MarkupLine(
-            $"[dim]Warmup: {WarmupCalculator.WarmupBars} bars pre-fetched " +
-            "so EMA200 is converged before first signal.[/]\n");
+            $"[dim]Warmup: first {WarmupCalculator.WarmupBars} bars of stored history are skipped before signals; " +
+            "EMA50 stands in for EMA200 until 200 bars exist.[/]\n");
 
         await ConsoleRenderer.RunWithProgressAsync("Fetching latest prices", async onProgress =>
         {
-            await _fetcher.PopulateAsync(selectedStocks, fetchFrom, backtestTo, onProgress);
+            await _fetcher.PopulateAsync(selectedStocks, refreshFrom, backtestTo, onProgress);
         });
 
         AnsiConsole.WriteLine();
@@ -316,6 +397,60 @@ public class BacktesterConsoleApp
         }
     }
 
+    /// <summary>Per-bar indicator and gate dump for one ticker (nothing is persisted).</summary>
+    public async Task ShowDiagnosticsAsync(string ticker)
+    {
+        ticker = NormalizeTicker(ticker);
+        var (prices, evaluation) = await _runner.EvaluateAsync(
+            ticker, DateTime.Today.AddDays(-_settings.DefaultLookbackDays), DateTime.Today);
+
+        static string Flag(bool value, string color = "green") => value ? $"[{color}]Y[/]" : "[dim].[/]";
+
+        var table = new Table()
+            .Title($"[bold]{ticker}[/] [dim]({prices.Count} bars, signals from bar {WarmupCalculator.WarmupBars})[/]")
+            .Border(TableBorder.Rounded)
+            .AddColumn("Date")
+            .AddColumn(new TableColumn("Close").RightAligned())
+            .AddColumn(new TableColumn("EMA20").RightAligned())
+            .AddColumn(new TableColumn("EMA50").RightAligned())
+            .AddColumn(new TableColumn("RSI").RightAligned())
+            .AddColumn(new TableColumn("Vol x").RightAligned())
+            .AddColumn(new TableColumn("Entry").RightAligned())
+            .AddColumn(new TableColumn("Exit").RightAligned())
+            .AddColumn("Setup")
+            .AddColumn("Brkout")
+            .AddColumn("Held")
+            .AddColumn("Trend")
+            .AddColumn("Confirm")
+            .AddColumn("Pos")
+            .AddColumn("Signal");
+
+        foreach (var t in evaluation.Trace)
+        {
+            table.AddRow(
+                t.Date.ToString("dd MMM"),
+                t.Close.ToString("F3"),
+                t.Ema20.ToString("F3"),
+                t.Ema50.ToString("F3"),
+                t.Rsi.ToString("F0"),
+                t.VolumeRatio.ToString("F1"),
+                t.EntryScore >= _engine.EntryMinScore ? $"[green]{t.EntryScore}[/]" : t.EntryScore.ToString(),
+                t.ExitScore >= _engine.ExitMinScore ? $"[red]{t.ExitScore}[/]" : t.ExitScore.ToString(),
+                Flag(t.HasSetup),
+                Flag(t.Breakout),
+                Flag(t.HeldAboveLongEma),
+                Flag(t.TrendQuality),
+                Flag(t.BuyConfirm),
+                Flag(t.InTrade, "yellow"),
+                t.BuySignal ? "[bold green]BUY[/]" : t.SellSignal ? "[bold red]SELL[/]" : "");
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.MarkupLine(
+            "[dim]Setup = entry score met, waiting for breakout; Brkout = close > 20-bar high on 1.5x volume, closing near high; " +
+            "Held = last N closes above long EMA; Trend = trend-quality gate.[/]");
+    }
+
     public async Task ShowBacktestTradesAsync(string ticker)
     {
         ticker = NormalizeTicker(ticker);
@@ -434,15 +569,15 @@ public class BacktesterConsoleApp
 
             string status;
             string statusColor;
-            if (bars >= WarmupCalculator.WarmupBars)
+            if (usable > 0 && bars >= 200)
             {
                 status = "OK";
                 statusColor = "green";
                 ok++;
             }
-            else if (bars >= 300)
+            else if (usable > 0)
             {
-                status = "Partial";
+                status = "Partial (EMA50 proxy)";
                 statusColor = "yellow";
                 warn++;
             }
@@ -471,8 +606,8 @@ public class BacktesterConsoleApp
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine(
-                "[yellow]Tip:[/] Run [bold]Populate DB[/] first to fetch full history. " +
-                "Partial tickers will still produce signals but EMA200 may not be fully converged.");
+                "[yellow]Tip:[/] Increase [bold]PopulateMonths[/] and run [bold]Populate DB[/] for more history. " +
+                "Partial tickers still produce signals, using EMA50 in place of EMA200.");
         }
 
         AnsiConsole.WriteLine();
@@ -500,9 +635,11 @@ public class BacktesterConsoleApp
             $"MongoDB:            [yellow]{_settings.MongoConnectionString}[/]\n" +
             $"Database:           [yellow]{_settings.DatabaseName}[/]\n" +
             $"Backtest window:    [yellow]{_settings.DefaultLookbackDays} days[/]\n" +
-            $"Fetch window:       [yellow]{_settings.DefaultLookbackDays + WarmupCalculator.WarmupCalendarDays} days[/] (includes warmup)\n" +
-            $"Warmup bars:        [yellow]{WarmupCalculator.WarmupBars}[/] (EMA200 convergence)\n" +
+            $"Warmup bars:        [yellow]{WarmupCalculator.WarmupBars}[/] (EMA50 substitutes for EMA200 below 200 bars)\n" +
             $"Signal filter:      [yellow]last {_settings.RecentSignalDays} days[/]\n" +
+            $"Populate window:    [yellow]last {_settings.PopulateMonths} months[/] (no warmup)\n" +
+            $"Active screen:      [yellow]top {_settings.ActiveStockCount} by {_settings.ActivityLookbackDays}d avg volume[/]\n" +
+            $"Stock universe:     [yellow]{_settings.KlseStockUniverse.Count} candidates[/]\n" +
             $"KLSE tickers:       [yellow]{_klseStocks.Count} configured[/]\n" +
             $"Entry score min:    [yellow]>= {_engine.EntryMinScore}[/]\n" +
             $"Exit score min:     [yellow]>= {_engine.ExitMinScore}[/]\n" +
