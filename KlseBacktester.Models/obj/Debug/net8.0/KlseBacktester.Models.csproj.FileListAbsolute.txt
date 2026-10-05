@@ -1,0 +1,12 @@
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\bin\Debug\net8.0\KlseBacktester.Models.deps.json
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\bin\Debug\net8.0\KlseBacktester.Models.dll
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\bin\Debug\net8.0\KlseBacktester.Models.pdb
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.csproj.AssemblyReference.cache
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.GeneratedMSBuildEditorConfig.editorconfig
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.AssemblyInfoInputs.cache
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.AssemblyInfo.cs
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.csproj.CoreCompileInputs.cache
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.dll
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\refint\KlseBacktester.Models.dll
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\KlseBacktester.Models.pdb
+C:\Develop\KlseBacktester\KlseBacktester\KlseBacktester.Models\obj\Debug\net8.0\ref\KlseBacktester.Models.dll
