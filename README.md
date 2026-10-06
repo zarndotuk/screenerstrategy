@@ -154,6 +154,8 @@ Designed so the **Next.js app** can query these directly:
   - `AllowSetupBarBreakout: true` lets a breakout on the same bar as the score setup confirm the buy (no 1-bar lag).
   - `BreakoutCloseNearHighPercent: 0.5` accepts breakout bars closing in the top half of their range (was 0.70).
 - Flat zero-volume bars (Bursa holidays reported by Yahoo) are dropped before scoring.
+- Prices are fetched incrementally: only sessions after the last stored bar (and older gaps) are requested.
+  A session is stored only once it is final (after 18:00 MYT), so stored bars are never refetched.
 
 ---
 

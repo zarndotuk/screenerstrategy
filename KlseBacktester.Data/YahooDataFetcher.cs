@@ -18,7 +18,6 @@ public class YahooDataFetcher
     private const int HistoricalBackfillChunkDays = 90;
     private const int MaxDirectFetchDays = 186;
     private const int MinimumBootstrapRows = 5;
-    private const int RecentDataFreshnessDays = 7;
     private const int StartGapToleranceDays = 5;
     private static readonly TimeSpan InitialRateLimitBackoff = TimeSpan.FromSeconds(30);
 
@@ -89,6 +88,12 @@ public class YahooDataFetcher
         DateTime from, DateTime to,
         bool backfillUntilCovered = false)
     {
+        // Never store a session that hasn't closed yet: stored bars are final, so
+        // they never need to be fetched again.
+        var lastFinal = BursaCalendar.LastCompletedSessionDate();
+        if (to.Date > lastFinal)
+            to = lastFinal;
+
         // Upsert configured metadata first. Ticker-only configurations are
         // enriched from Yahoo metadata when price data is fetched below.
         var stockFilter = Builders<StockInfo>.Filter.Eq(s => s.Ticker, ticker);
@@ -136,7 +141,9 @@ public class YahooDataFetcher
             {
                 // Fetch OHLCV from Yahoo Finance
                 var chart = await GetHistoricalWithRetryAsync(ticker, rangeFrom, rangeTo);
-                var candles = chart.Candles;
+                var candles = chart.Candles
+                    .Where(c => c.Date >= rangeFrom.Date && c.Date <= rangeTo.Date)
+                    .ToList();
 
                 if (!candles.Any())
                 {
@@ -308,11 +315,8 @@ public class YahooDataFetcher
         var period1 = ToUnixSeconds(from.Date);
         var period2 = ToUnixSeconds(to.Date.AddDays(1));
         var encodedTicker = Uri.EscapeDataString(ticker);
-        var url = IsRecentRange(from, to)
-            ? $"https://query1.finance.yahoo.com/v8/finance/chart/{encodedTicker}" +
-              "?range=1mo&interval=1d&events=history&includeAdjustedClose=true"
-            : $"https://query1.finance.yahoo.com/v8/finance/chart/{encodedTicker}" +
-              $"?period1={period1}&period2={period2}&interval=1d&events=history&includeAdjustedClose=true";
+        var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{encodedTicker}" +
+                  $"?period1={period1}&period2={period2}&interval=1d&events=history&includeAdjustedClose=true";
 
         using var response = await Http.GetAsync(url);
         var json = await response.Content.ReadAsStringAsync();
@@ -467,12 +471,6 @@ public class YahooDataFetcher
         return new DateTimeOffset(DateTime.SpecifyKind(date, DateTimeKind.Utc)).ToUnixTimeSeconds();
     }
 
-    private static bool IsRecentRange(DateTime from, DateTime to)
-    {
-        return (to.Date - from.Date).TotalDays <= InitialBootstrapDays + 1
-            && to.Date >= DateTime.UtcNow.Date.AddDays(-1);
-    }
-
     private static HttpClient CreateHttpClient()
     {
         var client = new HttpClient();
@@ -524,14 +522,28 @@ public class YahooDataFetcher
             ranges.Add((backfillFrom, backfillTo));
         }
 
-        if (existingTo.Value.Date < to.Date.AddDays(-RecentDataFreshnessDays))
+        // Only fetch sessions after the last stored bar; stored bars are final and never refetched.
+        var forwardFrom = existingTo.Value.Date.AddDays(1);
+        if (HasWeekday(forwardFrom, to.Date))
         {
-            ranges.Add((existingTo.Value.Date.AddDays(1), to.Date));
+            ranges.Add((forwardFrom, to.Date));
         }
 
         return ranges
             .Where(r => r.From <= r.To)
             .ToList();
+    }
+
+    /// <summary>True when [from, to] contains at least one Mon–Fri date (Bursa doesn't trade weekends).</summary>
+    private static bool HasWeekday(DateTime from, DateTime to)
+    {
+        for (var d = from; d <= to; d = d.AddDays(1))
+        {
+            if (d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+                return true;
+        }
+
+        return false;
     }
 
     private static DateTime MaxDate(DateTime first, DateTime second)

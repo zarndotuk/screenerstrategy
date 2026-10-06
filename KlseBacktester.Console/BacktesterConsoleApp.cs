@@ -100,7 +100,7 @@ public class BacktesterConsoleApp
 
     public async Task PopulateDbAsync()
     {
-        var fetchTo = DateTime.Today;
+        var fetchTo = BursaCalendar.LastCompletedSessionDate();
         var fetchFrom = fetchTo.AddMonths(-_settings.PopulateMonths);
 
         AnsiConsole.MarkupLine(
@@ -131,7 +131,7 @@ public class BacktesterConsoleApp
         if (universe.Count == 0)
             universe = _klseStocks.ToList();
 
-        var to = DateTime.Today;
+        var to = BursaCalendar.LastCompletedSessionDate();
         var from = to.AddDays(-_settings.ActivityLookbackDays);
         var keep = Math.Max(1, _settings.ActiveStockCount);
 
@@ -210,8 +210,8 @@ public class BacktesterConsoleApp
         if (selectedStocks.Count == 0)
             return;
 
-        var backtestFrom = DateTime.Today.AddDays(-_settings.DefaultLookbackDays);
-        var backtestTo = DateTime.Today;
+        var backtestTo = BursaCalendar.LastCompletedSessionDate();
+        var backtestFrom = backtestTo.AddDays(-_settings.DefaultLookbackDays);
         // Only refresh the populate window so the DB stays at PopulateMonths of history.
         var refreshFrom = backtestTo.AddMonths(-_settings.PopulateMonths);
 
@@ -402,7 +402,9 @@ public class BacktesterConsoleApp
     {
         ticker = NormalizeTicker(ticker);
         var (prices, evaluation) = await _runner.EvaluateAsync(
-            ticker, DateTime.Today.AddDays(-_settings.DefaultLookbackDays), DateTime.Today);
+            ticker,
+            BursaCalendar.LastCompletedSessionDate().AddDays(-_settings.DefaultLookbackDays),
+            BursaCalendar.LastCompletedSessionDate());
 
         static string Flag(bool value, string color = "green") => value ? $"[{color}]Y[/]" : "[dim].[/]";
 
@@ -539,9 +541,9 @@ public class BacktesterConsoleApp
 
     private async Task ShowDataQuality()
     {
-        var backtestFrom = DateTime.Today.AddDays(-_settings.DefaultLookbackDays);
+        var to = BursaCalendar.LastCompletedSessionDate();
+        var backtestFrom = to.AddDays(-_settings.DefaultLookbackDays);
         var fetchFrom = WarmupCalculator.FetchFrom(backtestFrom);
-        var to = DateTime.Today;
 
         AnsiConsole.MarkupLine(
             "[dim]Checking bar counts in DB for fetch window " +
